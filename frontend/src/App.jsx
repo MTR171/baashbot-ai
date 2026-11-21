@@ -115,7 +115,14 @@ export default function App() {
   const toggleVoiceMic = () => {
     unlockAudio();
     if (!micSupported) {
-      alert('তোমার ব্রাউজারে ওয়েব ভয়েস ইনপুট সাপোর্ট নাই — iPhone কীবোর্ডের নিচের মাইক 🎙️ বাটন দিয়ে বাংলায় বলে সরাসরি লিখতে পারবে!');
+      // Show a helpful in-chat message instead of an annoying alert
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'bot',
+          text: '🎙️ iPhone-এ ব্রাউজার ভয়েস সাপোর্ট নেই! কিন্তু চিন্তা নেই — নিচের টেক্সট বক্সে ট্যাপ করো, তারপর কীবোর্ডের মাইক 🎤 আইকন চেপে বাংলায় বলো। iOS সরাসরি লিখে দেবে! ✅',
+        },
+      ]);
       return;
     }
 
@@ -322,6 +329,10 @@ export default function App() {
               onChange={(e) => setInput(e.target.value)}
               placeholder={botState === 'listening' ? 'শুনছি... কথা বলো 🎙️' : 'লিখো বা মাইকে বলো...'}
               className="flex-1 h-12 px-4 rounded-2xl bg-slate-900 border border-slate-800 text-sm text-white focus:outline-none focus:border-cyan-400"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck="false"
+              enterKeyHint="send"
             />
 
             <button

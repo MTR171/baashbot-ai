@@ -80,22 +80,44 @@ export function playSfx(type = 'pop', muted = false) {
   } catch (_) {}
 }
 
-export function speakText(text, lang = 'bn', muted = false, onStart, onEnd) {
-  if (muted || !text || typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    if (onEnd) onEnd();
-    return;
+function pickBestVoice(voices, lang) {
+  if (lang === 'en') {
+    return (
+      voices.find((v) => v.lang.toLowerCase() === 'en-us' && v.localService) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith('en') && v.localService) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith('en')) ||
+      null
+    );
   }
+  // For Bangla: try bn-BD → bn → hi-IN (Hindi often sounds less robotic for
+  // Bengali text than a fully synthetic fallback) → first local voice → null
+  return (
+    voices.find((v) => v.lang.toLowerCase() === 'bn-bd') ||
+    voices.find((v) => v.lang.toLowerCase() === 'bn-in') ||
+    voices.find((v) => v.lang.toLowerCase().startsWith('bn')) ||
+    voices.find((v) => v.lang.toLowerCase().startsWith('hi') && v.localService) ||
+    null
+  );
+}
+
+function doSpeak(text, lang, onStart, onEnd) {
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    const targetLang = lang === 'en' ? 'en-US' : 'bn-BD';
-    utter.lang = targetLang;
-    utter.rate = 1.05;
-    utter.pitch = 1.08;
+    utter.lang = lang === 'en' ? 'en-US' : 'bn-BD';
+
+    if (lang === 'bn') {
+      // Slower rate sounds more natural for Bangla on synthetic voices
+      utter.rate = 0.92;
+      utter.pitch = 1.0;
+    } else {
+      utter.rate = 1.05;
+      utter.pitch = 1.0;
+    }
 
     const voices = window.speechSynthesis.getVoices();
-    const match = voices.find((v) => v.lang.toLowerCase().startsWith(lang === 'en' ? 'en' : 'bn'));
-    if (match) utter.voice = match;
+    const best = pickBestVoice(voices, lang);
+    if (best) utter.voice = best;
 
     utter.onstart = () => onStart && onStart();
     utter.onend = () => onEnd && onEnd();
@@ -103,6 +125,30 @@ export function speakText(text, lang = 'bn', muted = false, onStart, onEnd) {
     window.speechSynthesis.speak(utter);
   } catch (_) {
     if (onEnd) onEnd();
+  }
+}
+
+export function speakText(text, lang = 'bn', muted = false, onStart, onEnd) {
+  if (muted || !text || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    if (onEnd) onEnd();
+    return;
+  }
+  // iOS Safari loads voices asynchronously — wait for them if not ready yet
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length > 0) {
+    doSpeak(text, lang, onStart, onEnd);
+  } else {
+    // onvoiceschanged fires once voices are loaded (iOS, some Android browsers)
+    const handler = () => {
+      window.speechSynthesis.removeEventListener('voiceschanged', handler);
+      doSpeak(text, lang, onStart, onEnd);
+    };
+    window.speechSynthesis.addEventListener('voiceschanged', handler);
+    // Safety fallback: if voices never load in 1.5s, speak anyway
+    setTimeout(() => {
+      window.speechSynthesis.removeEventListener('voiceschanged', handler);
+      doSpeak(text, lang, onStart, onEnd);
+    }, 1500);
   }
 }
 
